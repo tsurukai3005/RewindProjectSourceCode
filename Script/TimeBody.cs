@@ -25,18 +25,13 @@ public class TimeBody : MonoBehaviour
 
     Rigidbody2D rb;
     private Vector2 currentVelocity;
-    private Vector2 previousVelocity;
-    private Vector2 MaxVelocity;
-    private Vector2 acceleration;
-    private bool hasAppliedInitialForce = false; // 速度と加速度が適用済みか
-    private float MaxSpeedX = 15f;
-    private float MaxSpeedY = 12f;
+    private float currentAngularVelocity;
+    private bool hasAppliedInitialForce = false; // 速度が適用済みか
 
-    // プレイヤーに与える力を記録
+    // オブジェクトがプレイヤーに与える力
     private Vector2 forceOnPlayer = Vector2.zero;
-    // プレイヤーが接触しているかを管理
+    private float maxForceOnPlayer = 50f;
     private Rigidbody2D playerRb = null;
-    // プレイヤーとの接触状態
     private bool isPlayerContacting = false;
 
     [Header("UI表示用")]
@@ -49,29 +44,20 @@ public class TimeBody : MonoBehaviour
         rb = GetComponent<Rigidbody2D>();
         timeManager = GetComponent<TimeManager>();
 
+        rb.bodyType = RigidbodyType2D.Dynamic;
+        rb.collisionDetectionMode = CollisionDetectionMode2D.Continuous;
+
         CreateAfterImages();
     }
 
     void Update()
     {
-        //InputManager();
         DrawAfterImages();
-
-        //DebugDisplay();
-    }
-
-    private void DebugDisplay()
-    {
-        // デバッグ表示
-        DisplayPointsInTime();
-        UpdatePointsInTimeUI();
     }
 
     void FixedUpdate()
     {
         SwitchTimeState();
-
-        //DisplayVelocityAndAcceleration();
     }
 
     private void SwitchTimeState()
@@ -100,18 +86,13 @@ public class TimeBody : MonoBehaviour
             rb.sharedMaterial = defaultMaterial;
         }
 
-        rb.linearVelocity = Vector2.zero;
-        rb.angularVelocity = 0f;
-
-        // 衝突検出モードをContinuousに設定
-        rb.collisionDetectionMode = CollisionDetectionMode2D.Continuous;
-
         // x, y の位置と z 軸の回転を固定
         rb.constraints = RigidbodyConstraints2D.FreezePositionX |
                          RigidbodyConstraints2D.FreezePositionY |
                          RigidbodyConstraints2D.FreezeRotation;
 
         HitPlayer();
+        //VisualizeForceOnPlayer();
     }
 
     private void HitPlayer()
@@ -133,44 +114,54 @@ public class TimeBody : MonoBehaviour
             if (hit.CompareTag("Player"))
             {
                 CapsuleCollider2D playerCollider = hit.GetComponent<CapsuleCollider2D>();
-                if (playerCollider != null)
-                {
-                    playerRb = hit.GetComponent<Rigidbody2D>();
-                    if (playerRb != null)
-                    {
-                        // PointInTimeから速度を取得
-                        Vector2 rewindVelocity = -pointsInTime[0].velocity;
+                if (playerCollider == null) return;
 
-                        // 相対速度を計算
-                        Vector2 relativeVelocity = rewindVelocity - playerRb.linearVelocity;
+                playerRb = hit.GetComponent<Rigidbody2D>();
+                if (playerRb == null) return;
 
-                        forceOnPlayer = 0.005f * relativeVelocity * playerRb.mass / Time.fixedDeltaTime;
-                        isPlayerContacting = true;
-                    }
-                }
+                Vector2 relativeVelocity = -pointsInTime[0].velocity - playerRb.linearVelocity;
+                forceOnPlayer = relativeVelocity * rb.mass / Time.fixedDeltaTime;
+                forceOnPlayer = Vector2.ClampMagnitude(forceOnPlayer, maxForceOnPlayer);
+                isPlayerContacting = true;
             }
+        }
+    }
+
+    private void OnCollisionEnter2D(Collision2D collision)
+    {
+        if (collision.gameObject.CompareTag("Player"))
+        {
+            playerRb = collision.gameObject.GetComponent<Rigidbody2D>();
+            if (playerRb != null)
+            {
+                isPlayerContacting = true;
+            }
+        }
+    }
+
+    private void OnCollisionStay2D(Collision2D collision)
+    {
+        if (isPlayerContacting && playerRb != null && pointsInTime.Count > 0)
+        {
+            Vector2 relativeVelocity = -pointsInTime[0].velocity - playerRb.linearVelocity;
+            forceOnPlayer = relativeVelocity * playerRb.mass / Time.fixedDeltaTime;
+            forceOnPlayer = Vector2.ClampMagnitude(forceOnPlayer, maxForceOnPlayer);
+        }
+    }
+
+    private void OnCollisionExit2D(Collision2D collision)
+    {
+        if (collision.gameObject.CompareTag("Player"))
+        {
+            isPlayerContacting = false;
+            playerRb = null;
+            forceOnPlayer = Vector2.zero;
         }
     }
 
     // 時間進行
     void Running()
     {
-        float CurrentSpeedX = (float)Math.Sqrt(Math.Pow(rb.linearVelocity.x, 2));
-        float CurrentSpeedY = (float)Math.Sqrt(Math.Pow(rb.linearVelocity.y, 2));
-
-        //if (CurrentSpeedX > MaxSpeedX)
-        //{
-        //    rb.linearVelocity = new Vector2(rb.linearVelocity.x / CurrentSpeedX * MaxSpeedX, rb.linearVelocity.y);
-        //}
-        //if (CurrentSpeedY > MaxSpeedY)
-        //{
-        //    rb.linearVelocity = new Vector2(rb.linearVelocity.x, rb.linearVelocity.y / CurrentSpeedY * MaxSpeedY);
-        //}
-
-        // Rigidbody2DをDynamicに設定
-        rb.bodyType = RigidbodyType2D.Dynamic;
-        rb.angularDamping = 0.0f;
-
         // x, y, z の固定を解除
         rb.constraints = RigidbodyConstraints2D.None;
 
@@ -180,11 +171,12 @@ public class TimeBody : MonoBehaviour
             rb.sharedMaterial = boundMaterial;
         }
 
+        // Runnningに移行した瞬間のみ速度を適用する
         if (!hasAppliedInitialForce && pointsInTime.Count > 0)
         {
             PointInTime latestPoint = pointsInTime[0];
-            rb.linearVelocity = latestPoint.velocity;
-            //rb.AddForce(latestPoint.acceleration * rb.mass, ForceMode2D.Force);
+            rb.linearVelocity = latestPoint.velocity; // 最新のフレームの速度を適用
+            rb.angularVelocity = latestPoint.angularVelocity;
 
             hasAppliedInitialForce = true;
         }
@@ -204,11 +196,15 @@ public class TimeBody : MonoBehaviour
         if (pointsInTime.Count > 0)
         {
             PointInTime pointInTime = pointsInTime[0];
+
+            // 位置を用いて逆再生すると、軌道上のオブジェクトをすり抜ける
+            // 速度・角速度のみによる逆再生だと安定しない
             transform.position = pointInTime.position;
             transform.rotation = pointInTime.rotation;
             rb.linearVelocity = -pointInTime.velocity;
+            rb.angularVelocity = -pointInTime.angularVelocity;
 
-            // プレイヤーに力を適用
+            // プレイヤーに力を加える
             if (isPlayerContacting && playerRb != null)
             {
                 playerRb.AddForce(forceOnPlayer, ForceMode2D.Impulse);
@@ -234,18 +230,13 @@ public class TimeBody : MonoBehaviour
     void Record()
     {
         currentVelocity = rb.linearVelocity;
-
-        if (pointsInTime.Count > 0)
-        {
-            previousVelocity = pointsInTime[0].velocity;
-            acceleration = (currentVelocity - previousVelocity) / Time.fixedDeltaTime;
-        }
+        currentAngularVelocity = rb.angularVelocity;
 
         pointsInTime.Insert(0, new PointInTime(
             transform.position, 
             transform.rotation,
             currentVelocity,
-            acceleration
+            currentAngularVelocity
         ));
     }
 
@@ -258,7 +249,6 @@ public class TimeBody : MonoBehaviour
         {
             GameObject afterImage = Instantiate(afterImageSource, transform.position, transform.rotation);
             afterImage.name = gameObject.name + $"_afterImage[{i}]";
-            //RemoveUnnecessaryComponents(afterImage);
             afterImage.transform.SetParent(this.transform);
             afterImage.transform.localScale = Vector3.one;
             afterImages.Add(afterImage);
@@ -339,5 +329,33 @@ public class TimeBody : MonoBehaviour
             pointsInTimeText.text = displayText;
         }
     }
+
+    /// forceOnPlayer の力の大きさと方向を可視化する
+    private void VisualizeForceOnPlayer()
+    {
+        if (isPlayerContacting && playerRb != null)
+        {
+            // 力の始点は現在のオブジェクトの位置
+            Vector2 startPoint = transform.position;
+
+            // 力の終点は始点 + forceOnPlayer
+            Vector2 endPoint = startPoint + forceOnPlayer * 0.005f;
+
+            // 矢印を描画 (シーンビューのみ)
+            Debug.DrawLine(startPoint, endPoint, Color.red, 0.1f, false);
+
+            // 矢印の先端（三角部分）
+            Vector2 direction = (endPoint - startPoint).normalized;
+            Vector2 right = new Vector2(-direction.y, direction.x) * 0.05f;
+            Vector2 left = new Vector2(direction.y, -direction.x) * 0.05f;
+
+            Debug.DrawLine(endPoint, endPoint - direction * 0.1f + right, Color.red, 0.1f, false);
+            Debug.DrawLine(endPoint, endPoint - direction * 0.1f + left, Color.red, 0.1f, false);
+
+            // 力の情報をログに出力
+            Debug.Log($"ForceOnPlayer: Magnitude = {forceOnPlayer.magnitude:F2}, Direction = {forceOnPlayer.normalized}");
+        }
+    }
+
 
 }

@@ -6,8 +6,6 @@ using System.Collections.Generic;
 
 public class PlayerAction : MonoBehaviour
 {
-    //private TimeBody timeBody;
-
     [SerializeField] private Camera mainCamera;
 
     [SerializeField, Header("移動速度")]
@@ -37,19 +35,16 @@ public class PlayerAction : MonoBehaviour
     private SpriteRenderer _spriteRenderer;
     private Animator _animation;
     private bool _onFloor;
-    //private float _defaultGravityScale;
     private float _jumpTimeCounter;
     private bool _isJumping;
     private bool _jumpButtonHeld;
 
-    // Start is called once before the first execution of Update after the MonoBehaviour is created
     void Start()
     {
         _rigid = GetComponent<Rigidbody2D>();
         _animation = GetComponent<Animator>();
         _spriteRenderer = GetComponent<SpriteRenderer>();
         _remainingJumps = _jumpCounts;
-        //_defaultGravityScale = _rigid.gravityScale;
         _jumpTimeCounter = _jumpTime;
     }
 
@@ -92,7 +87,7 @@ public class PlayerAction : MonoBehaviour
     {
         int FloorlayerMask = LayerMask.GetMask("Floor"); // Floorレイヤーの番号を取得
         Vector3 bottomPos = transform.position - new Vector3(0.0f, transform.lossyScale.y / 2.0f); // プレイヤーの足元の座標
-        Vector3 bottomSize = new Vector3(transform.lossyScale.x - 0.1f, 0.3f); // プレイヤーの足元のサイズ
+        Vector3 bottomSize = new Vector3(transform.lossyScale.x - 0.1f, 0.3f); // プレイヤーの足元判定のサイズ
         RaycastHit2D bottomHit = Physics2D.BoxCast(bottomPos, bottomSize, 0.0f, Vector2.zero, 0.1f, FloorlayerMask); // プレイヤーの足元に床があるかどうか
 
         if (bottomHit.transform == null)
@@ -103,6 +98,7 @@ public class PlayerAction : MonoBehaviour
         else
         {
             // 床に着地した瞬間のみ、ジャンプ回数をリセットする
+            // これをしないと、ジャンプした直後の床判定でジャンプ回数が復活してしまう
             if (!_onFloor)
             {
                 _remainingJumps = _jumpCounts;
@@ -115,6 +111,7 @@ public class PlayerAction : MonoBehaviour
         }    
     }
 
+    // 落下中に強い重力を与える
     private void _ApplyFallGravity()
     {
         if (!_onFloor && _rigid.linearVelocity.y < 0) // 空中かつ下降中
@@ -122,6 +119,7 @@ public class PlayerAction : MonoBehaviour
             _rigid.gravityScale = _fallGravityScale;
             float CurrentSpeed = (float)Math.Sqrt(Math.Pow(_rigid.linearVelocity.y, 2));
 
+            // 下降速度に制限を付ける
             if (CurrentSpeed > DownMaxSpeed)
             {
                 _rigid.linearVelocity = new Vector2(_rigid.linearVelocity.x, _rigid.linearVelocity.y / CurrentSpeed * DownMaxSpeed);
@@ -133,6 +131,7 @@ public class PlayerAction : MonoBehaviour
         }
     }
 
+    // プレイヤーの足元判定の表示（デバッグ用）
     private void OnDrawGizmos()
     {
         Gizmos.color = new Color(0f, 1f, 0f, 0.3f);
@@ -142,7 +141,7 @@ public class PlayerAction : MonoBehaviour
         Gizmos.DrawCube(bottomPos, bottomSize);
     }
 
-    // シーンカメラに映っていても、メソッドが実行される
+    // プレイヤーがカメラ外に移動した場合、消す処理
     private void becameInvisible()
     {
         Camera cameraToUse = mainCamera != null ? mainCamera : Camera.main;
@@ -185,10 +184,8 @@ public class PlayerAction : MonoBehaviour
                 _isJumping = true;
                 _remainingJumps--;
                 _animation.SetBool("isJumping", false); // 二段ジャンプ時にアニメを最初から再生するための設定
-                if (_rigid.linearVelocity.y < 0)
-                {
-                    _rigid.linearVelocity = new Vector2(_rigid.linearVelocity.x, 0f);
-                }
+
+                // 空中ジャンプ時にプレイヤーの速度をゼロにし、一定の高さでジャンプできるようにする
                 _rigid.linearVelocity = new Vector2(_rigid.linearVelocity.x, 0f);
 
                 _rigid.AddForce(Vector2.up * _jumpSpeed, ForceMode2D.Impulse);

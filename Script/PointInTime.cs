@@ -2,16 +2,16 @@ using UnityEngine;
 
 public class PointInTime
 {
-    public Vector3 position;
+    public Vector2 position;
     public Quaternion rotation;
-    public Vector3 velocity;
-    public Vector3 acceleration;
+    public Vector2 velocity;
+    public float angularVelocity;
 
-    public PointInTime(Vector3 _position, Quaternion _rotation, Vector3 _velocity, Vector3 _acceleration)
+    public PointInTime(Vector2 _position, Quaternion _rotation, Vector2 _velocity, float _angularVelocity)
     {
         position = _position;
         rotation = _rotation;
         velocity = _velocity;
-        acceleration = _acceleration;
+        angularVelocity = _angularVelocity;
     }
 }

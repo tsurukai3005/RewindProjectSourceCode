@@ -11,18 +11,18 @@ public class ObjectsSpawner : MonoBehaviour
     [SerializeField] private float spawnInterval = 2.0f;
 
     [Header("Force Settings")]
-    [SerializeField] private List<float> spawnForceList; // 力のリスト
+    [SerializeField] private List<float> spawnForceList;
 
     [Header("Angle Settings")]
-    [SerializeField] private List<float> spawnAngleList; // 射出角度のリスト
+    [SerializeField] private List<float> spawnAngleList;
 
     [Header("Angular Velocity Settings")]
-    [SerializeField] private List<float> spawnAngleVelocityList; // 角速度のリスト
+    [SerializeField] private List<float> spawnAngleVelocityList;
 
     [Header("Spawner Parts")]
     [SerializeField] private GameObject spawnerBodyPrefab;
     [SerializeField] private GameObject spawnerBasePrefab;
-    float parentZRotation = 180f;
+    [SerializeField] private float parentZRotation = 180f; // スポナー接地面の角度（180度で下向きに接地する）
 
     private GameObject spawnerBodyInstance;
     private GameObject spawnerBaseInstance;
@@ -39,6 +39,7 @@ public class ObjectsSpawner : MonoBehaviour
     {
         spawnedObjects = new List<GameObject>();
         timeManager = GetComponent<TimeManager>();
+
         if (transform.parent != null)
         {
             parentZRotation = transform.parent.eulerAngles.z;
@@ -52,6 +53,7 @@ public class ObjectsSpawner : MonoBehaviour
         SpawnerUpdate();
     }
 
+    // スポナーの位置に大砲の見た目を生成する
     private void SpawnSpawnerParts()
     {
         if (spawnerBodyPrefab != null && spawnerBasePrefab != null)
@@ -82,30 +84,47 @@ public class ObjectsSpawner : MonoBehaviour
         }
     }
 
+    // 
     void SpawnerUpdate()
     {
-        int spawnedQuantity = spawnedObjects.Count;
+        
 
         if (timeManager.isRunning)
         {
-            spawnTimer -= Time.fixedDeltaTime;
-            if (spawnTimer <= 0)
-            {
-                SpawnObject();
-                spawnTimer = spawnInterval;
-            }
+            SpawnerRun();
         }
         else if (timeManager.isRewinding)
         {
-            spawnTimer += Time.fixedDeltaTime;
-            if (spawnTimer >= spawnInterval)
+            SpawnerRewind();
+        }
+    }
+
+    private void SpawnerRun()
+    {
+        spawnTimer -= Time.fixedDeltaTime;
+
+        if (spawnTimer <= 0)
+        {
+            SpawnObject();
+            spawnTimer = spawnInterval;
+        }
+    }
+
+    private void SpawnerRewind()
+    {
+        int spawnedQuantity = spawnedObjects.Count;
+        spawnTimer += Time.fixedDeltaTime;
+
+        if (spawnTimer >= spawnInterval)
+        {
+            if ((spawnedQuantity > 0))
             {
-                if ((spawnedQuantity > 0)) {
-                    Destroy(spawnedObjects[spawnedQuantity - 1]);
-                    spawnedObjects.RemoveAt(spawnedQuantity - 1);
-                }
-                spawnTimer = 0f;
+                // 射出したオブジェクトを逆再生で順に消していく
+                Destroy(spawnedObjects[spawnedQuantity - 1]);
+                spawnedObjects.RemoveAt(spawnedQuantity - 1);
             }
+
+            spawnTimer = 0f;
         }
     }
 
@@ -124,6 +143,7 @@ public class ObjectsSpawner : MonoBehaviour
         lastSpawnedObject = spawnedObject;
     }
 
+    // 新たに生成したオブジェクトの時間を他と揃える
     private void TimeAdjustObjectAndSpawner(GameObject spawnedObject)
     {
         TimeManager spawnedObjectTimeManager = spawnedObject.GetComponent<TimeManager>();
@@ -163,7 +183,7 @@ public class ObjectsSpawner : MonoBehaviour
 
         lastForceVector = forceDirection * randomForce;
 
-        // Body の角度を調整
+        // 射出角にBodyを合わせる
         if (spawnerBodyInstance != null)
         {
             spawnerBodyInstance.transform.rotation = Quaternion.Euler(0, 0, randomAngle + 90f);
